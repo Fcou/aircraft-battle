@@ -5,7 +5,7 @@ from pygame.locals import *
 pygame.init()
 
 #创建窗口
-canvas = pygame.display.set_mode((1200,715))
+canvas = pygame.display.set_mode((1300,700),FULLSCREEN)
 canvas.fill((255,255,255))
 #导入图片
 bg = pygame.image.load("images/background/bg235.jpg")
@@ -51,67 +51,66 @@ class Fly():
         self.img = img
         self.canDel = False
         self.life = life
-        self.moveLastTime = 0
-        self.moveIntervalTime = 0.01 # 敌飞机移动的时间间隔
     #绘制图片
     def paint(self):
         draw(self.img, self.x, self.y)
-        
     #移动
     def step(self):
-        if not ifTimeDown(self.moveLastTime, self.moveIntervalTime):
-            return
-        AllVar.moveLastTime = time.time() 
         self.y += 3
     #是否碰撞
     def isHit(self, other):
         return self.x + self.width >= other.x and self.x < other.x + other.width\
             and self.y + self.height >= other.y and self.y < other.y + other.height
-    #碰撞后逻辑处理
-    def bang(self):
+    #被子弹击中
+    def hit(self):
         self.life -= 1
         if self.life <= 0:
             self.canDel = True
             if hasattr(self, "score"):
                 AllVar.score += self.score
+    
 
 #创建英雄机类
 class Hero(Fly):
     def __init__(self,x,y,width,height,img,life):
         Fly.__init__(self, x, y, width, height, img, life)
         self.shootLastTime = 0
-        self.shootInterval = 0.2# 单位为秒
-        
-    def shoot(self):
+        self.shootInterval = 0.1# 产生子弹的时间间隔
+    def makeButtles(self):
         if not ifTimeDown(self.shootLastTime, self.shootInterval):
             return
         self.shootLastTime = time.time()
-        AllVar.bullets.append(Bullet(self.x+10, self.y, 10, 10, bullet, 1))
+        AllVar.bullets.append(Bullet(self.x+8, self.y, 10, 10, bullet, 1))
+        AllVar.bullets.append(Bullet(self.x+43, self.y, 10, 10, bullet, 1))   
     def bang(self):
         self.life -= 1
         if self.life <= 0:
             self.canDel = True
-            AllVar.state = 3
-        AllVar.hero.x = 240
-        AllVar.hero.y = 500
-              
+        
+        
 #创建敌飞机类
 class Enemy(Fly):
     def __init__(self,x,y,width,height,img,life,score):
         Fly.__init__(self, x, y, width, height, img, life)
         self.score = score
     def isOut(self):
-        return self.y > 650+self.height
+        return self.y > 650+self.height  
+    def bang(self):
+        self.life = 0
+        self.canDel = True
+        AllVar.score += self.score
         
 #创建子弹类
 class Bullet(Fly):
     def __init__(self,x,y,width,height,img,life):
         Fly.__init__(self, x, y, width, height, img, life)
-        self.retime = 0.1
     def step(self):
-        self.y -= 5
+        self.y -= 7
     def isOut(self):
         return self.y < -self.height
+    def bang(self):
+        self.life = 0
+        self.canDel = True
         
 #随机产生敌飞机
 def makeEnemys():
@@ -124,11 +123,11 @@ def makeEnemys():
     x3 = random.randint(0, 1300 - 169)
     n = random.randint(0,10)
     if n <=6:
-        AllVar.enemys.append(Enemy(x1, 0, 57, 45, enemy1, 1, 1))
+        AllVar.enemys.append(Enemy(x1, -45, 57, 45, enemy1, 10, 1))
     elif n <= 9:
-        AllVar.enemys.append(Enemy(x2, 0, 50, 68, enemy2, 3, 5))
+        AllVar.enemys.append(Enemy(x2, -68, 50, 68, enemy2, 20, 5))
     else:
-        AllVar.enemys.append(Enemy(x3, 0, 169, 258, enemy3, 3, 10))
+        AllVar.enemys.append(Enemy(x3, -258, 100, 153, enemy3, 30, 10))
  
         
 #绘制全部组件
@@ -160,12 +159,16 @@ def stepAll():
 #检查全部组件碰撞
 def cheackAll():
     for enemy in AllVar.enemys:
+        if enemy.canDel == True:
+            continue
         if AllVar.hero.isHit(enemy):
             enemy.bang()
             AllVar.hero.bang()
         for bullet in AllVar.bullets:
+            if enemy.canDel == True:
+                continue
             if enemy.isHit(bullet):
-                enemy.bang()
+                enemy.hit()
                 bullet.bang()
  
 #删除
@@ -176,6 +179,8 @@ def delAll():
     for bullet in AllVar.bullets:
         if bullet.isOut() or bullet.life <= 0:
             AllVar.bullets.remove(bullet)
+    if AllVar.hero.life <= 0:
+            AllVar.state = 3
 
 
 #创建全局变量
@@ -196,7 +201,6 @@ class AllVar():
 AllVar.state = 0
 AllVar.sky = Sky()
 AllVar.hero = Hero(600,600,60,75,hero,3)
-AllVar.enemys.append(Enemy(200, 0, 57, 45, enemy1, 1, 1))
 
 #处理互动事件
 def handleEvent():
@@ -218,13 +222,13 @@ def handleEvent():
         #监听鼠标移动事件
         if event.type == pygame.MOUSEMOTION:
             if AllVar.state == 1:
-                AllVar.hero.x = event.pos[0]
-                AllVar.hero.y = event.pos[1]
+                AllVar.hero.x = event.pos[0]-AllVar.hero.width/2
+                AllVar.hero.y = event.pos[1]-AllVar.hero.height/2
             # 鼠标移入移出事件切换状态
-            if ifMouseOut():
+            if ifMouseOut(event.pos[0],event.pos[1]):
                 if AllVar.state == 1:
                     AllVar.state = 2
-            if ifMouseIn():
+            if ifMouseIn(event.pos[0],event.pos[1]):
                 if AllVar.state == 2:
                     AllVar.state = 1
 #对应状态写对应组件逻辑
@@ -236,15 +240,13 @@ def controlStates():
         draw(startGame, 500, 500)
     elif AllVar.state == 1:
         makeEnemys()
+        AllVar.hero.makeButtles()
         paintAll()
-        stepAll()
-        AllVar.hero.shoot()
+        stepAll()  
         cheackAll()
         delAll()
-        
     elif AllVar.state == 2:
         paintAll()
-        AllVar.sky.step()
         draw(pause, 500, 250)    
     elif AllVar.state == 3:
         paintAll()
@@ -261,13 +263,20 @@ def ifTimeDown(lastTime, intervalTime):
     return now - lastTime >= intervalTime
 
 #判断鼠标是否移出屏幕
-def ifMouseOut():
-    return AllVar.hero.x < 0 or AllVar.hero.x > 480 or\
-        AllVar.hero.y < 0 or AllVar.hero.y > 650
-#判断鼠标是否移入屏幕
-def ifMouseIn():
-    return AllVar.hero.x > 0 or AllVar.hero.x < 480 or\
-        AllVar.hero.y > 0 or AllVar.hero.y < 650
+def ifMouseOut(x, y):
+    if x >= 1190 or x <= 0 or y > 700 or y <= 0:
+        return True
+    else:
+        return False
+
+
+#判断鼠标是否移入了游戏区域
+def ifMouseIn(x, y):
+    if x > 0 and x < 1150 and y > 1 and y < 648:
+        return True
+    else:
+        return False
+
 
 #绘制图片
 def draw(img, x, y):
